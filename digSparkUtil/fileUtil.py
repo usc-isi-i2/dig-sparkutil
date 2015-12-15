@@ -4,6 +4,7 @@ import json
 import csv
 import StringIO
 import io
+from dictUtil import like_dict
 
 class FileUtil:
     def __init__(self, sparkContext):
@@ -111,7 +112,7 @@ where pyjson is the python representation of the JSON object (e.g., dict)"""
     @staticmethod
     def get_json_config(config_spec):
         config_file = None
-        if likeDict(config_spec):
+        if like_dict(config_spec):
             return config_spec
         elif config_spec.startswith("http"):
             # URL: fetch it
