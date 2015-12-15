@@ -113,7 +113,7 @@ where pyjson is the python representation of the JSON object (e.g., dict)"""
         config_file = None
         if likeDict(config_spec):
             return config_spec
-        elif config_spec.("http") == 0:
+        elif config_spec.startswith("http"):
             # URL: fetch it
             config_file = urllib.urlopen(config_spec)
         else:
