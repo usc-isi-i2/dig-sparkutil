@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
+import collections
+
 def as_dict(likeDict):
-    if isinstance(likeDict, dict):
+    if isinstance(likeDict, collections.Mapping):
         return likeDict
     else:
         try:
