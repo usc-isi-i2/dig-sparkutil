@@ -4,7 +4,7 @@ import json
 import csv
 import StringIO
 import io
-from dictUtil import like_dict
+from dictUtil import as_dict
 
 class FileUtil:
     def __init__(self, sparkContext):
@@ -111,16 +111,21 @@ where pyjson is the python representation of the JSON object (e.g., dict)"""
 
     @staticmethod
     def get_json_config(config_spec):
+        # if it's a dict, or coercible to a dict, return the dict
+        try:
+            return as_dict(config_spec)
+        except TypeError:
+            pass
+        # Not a dict
         config_file = None
-        if like_dict(config_spec):
-            return config_spec
-        elif config_spec.startswith("http"):
+        if config_spec.startswith("http"):
             # URL: fetch it
             config_file = urllib.urlopen(config_spec)
         else:
             # string: open file with that name
             config_file = open(config_spec)
         config = json.load(config_file)
+        # Close any open files
         try:
             config_file.close()
         except:
