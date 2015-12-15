@@ -10,6 +10,27 @@ class FileUtil:
         self.sc = sparkContext
         pass
 
+    ## GENERIC
+
+    ## Herein:
+    ## fileformat is in {text, sequence}
+    ## dataformat is in {csv, json}
+    def load_file(self, filename, fileformat, dataformat, **kwargs):
+        if dataformat == "json":
+            return self.load_json_file(filename, fileformat, **kwargs)
+        elif dataformat == "csv":
+            return self.load_csv_file(filename, fileformat, **kwargs)
+        else:
+            raise ValueError("Unexpected fileformat {}".format(fileformat))
+
+    def save_file(self, rdd, filename, fileformat, dataformat, **kwargs):
+        if dataformat == "json":
+            return self.save_json_file(rdd, filename, fileformat, **kwargs)
+        elif dataformat == "csv":
+            return self.save_csv_file(rdd, filename, fileformat, **kwargs)
+        else:
+            raise ValueError("Unexpected fileformat {}".format(fileformat))
+
     ## JSON
 
     @staticmethod
@@ -66,7 +87,7 @@ where pyjson is the python representation of the JSON object (e.g., dict)"""
             return parsed_rdd
 
         elif fileformat == "sequence":
-            raise NotImplementedError("Fileformat=sequence, textformat=csv")
+            raise NotImplementedError("Fileformat=sequence, dataformat=csv")
         else:
             raise ValueError("Unexpected fileformat {}".format(fileformat))
         return input_rdd
@@ -83,6 +104,25 @@ where pyjson is the python representation of the JSON object (e.g., dict)"""
                 return filename
 
         elif fileformat == "sequence":
-            raise NotImplementedError("Fileformat=sequence, textformat=csv")
+            raise NotImplementedError("Fileformat=sequence, dataformat=csv")
         else:
             raise ValueError("Unexpected fileformat {}".format(fileformat))
+
+    @staticmethod
+    def get_json_config(config_spec):
+        config_file = None
+        if likeDict(config_spec):
+            return config_spec
+        elif config_spec.("http") == 0:
+            # URL: fetch it
+            config_file = urllib.urlopen(config_spec)
+        else:
+            # string: open file with that name
+            config_file = open(config_spec)
+        config = json.load(config_file)
+        try:
+            config_file.close()
+        except:
+            pass
+        return config
+    
