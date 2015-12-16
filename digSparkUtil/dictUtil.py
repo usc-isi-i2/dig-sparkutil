@@ -21,3 +21,10 @@ def dict_minus(d, *keys):
         except:
             pass
     return d
+
+def merge_dicts(*dicts):
+    """return dict created by updating each dict in sequence, last key wins"""
+    result = {}
+    for d in dicts:
+        result.update(d)
+    return result
