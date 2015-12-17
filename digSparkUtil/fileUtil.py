@@ -4,25 +4,105 @@ import json
 import csv
 import StringIO
 import io
-from dictUtil import as_dict
+from dictUtil import as_dict, merge_dicts
+import inspect
+import urllib
 
-class FileUtil:
+from pyspark import SparkContext
+
+class FileUtil(object):
     def __init__(self, sparkContext):
         self.sc = sparkContext
-        pass
+
+    ## Support for entries into manifest
+    # any entry created thus
+    # should have spark_context, name of caller, module of caller
+    # untested: do not use
+    def makeEntry(self, **kwargs):
+        entry = dict(**kwargs)
+        entry["spark_context"] = self.sc
+        op = kwargs.get("operation", None)
+        if not op:
+            try:
+                st = inspect.stack()
+                # stack exists
+                if len(st)>=2:
+                    # look up one stack frame, retrieve the function name[3]
+                    op = st[1][3]
+                # stack frame memory leak could be very bad, so be careful
+                del st
+            except:
+                pass
+
+        mdl = kwargs.get("module", None)
+        if not mdl:
+            try:
+                st = inspect.stack()
+                # stack exists
+                if len(st)>=2:
+                    # look up one stack frame, retrieve the module it belongs to
+                    mdl = inspect.getmodule(st[0]).__name__
+                # stack frame memory leak could be very bad, so be careful
+                del st
+            except:
+                pass
+        entry["module"] = mdl
+
+        return entry
 
     ## GENERIC
 
     ## Herein:
     ## file_format is in {text, sequence}
     ## data_type is in {csv, json}
+    
+    load_dispatch_table = {("sequence", "json"): "_load_sequence_json_file",
+                           ("sequence", "csv"):  "_load_sequence_csv_file",
+                           ("text", "json"):     "_load_text_json_file",
+                           ("text", "csv"):      "_load_text_csv_file"}
+    
+    def _load_sequence_json_file(self, filename, **kwargs):
+        rdd_input = self.sc.sequenceFile(filename)
+        rdd_json = rdd_input.mapValues(lambda x: json.loads(x))
+        return rdd_json
+
+    def _load_text_json_file(self, filename, separator='\t', **kwargs):
+        rdd_input = self.sc.textFile(filename)
+        rdd_json = rdd_input.map(lambda x: FileUtil.__parse_json_line(x, separator))
+        return rdd_json
+
+    def _load_sequence_csv_file(self, filename, **kwargs):
+        raise NotImplementedError("File_Format=sequence, data_type=csv")
+
+    def _load_text_csv_file(self, filename, separator='\t', **kwargs):
+        rdd_input = self.sc.textFile(filename)
+
+        def load_csv_record(line):
+            input_stream = StringIO.StringIO(line)
+            reader = csv.reader(input_stream, delimiter=separator)
+            return reader.next()
+
+        rdd_parsed = rdd_input.map(load_csv_record)
+        return rdd_parsed
+
     def load_file(self, filename, file_format='sequence', data_type='json', **kwargs):
-        if data_type == "json":
-            return self.load_json_file(filename, file_format, **kwargs)
-        elif data_type == "csv":
-            return self.load_csv_file(filename, file_format, **kwargs)
-        else:
-            raise ValueError("Unexpected file_format {}".format(file_format))
+        try:
+            handlerName = FileUtil.load_dispatch_table[(file_format, data_type)]
+            handler = getattr(self, handlerName)
+            rdd = handler(filename, **kwargs)
+            # TBD: return (rdd, manifestEntry)
+            # entry = self.makeEntry(input_filename=filename,
+            #                        input_file_format=file_format,
+            #                        input_data_type=data_type)
+            # return (rdd, entry)
+            return rdd
+        except KeyError: 
+            raise NotImplementedError("File_Format={}, data_type={}".format(file_format, data_type))
+
+    save_dispatch_table = {("sequence", "json"): "_save_sequence_json_file",
+                           ("sequence", "csv"):  "_save_sequence_csv_file",
+                           ("text", "json"):     "_save_text_json_file",
+                           ("text", "csv"):      "_save_text_csv_file"}
 
     def save_file(self, rdd, filename, file_format='sequence', data_type='json', **kwargs):
         if data_type == "json":
@@ -63,6 +143,8 @@ where pyjson is the python representation of the JSON object (e.g., dict)"""
         return key + sep + json.dumps(value)
 
     def save_json_file(self, rdd, filename, file_format='sequence', separator='\t'):
+        print("Enter save_json_file")
+        exit(0)
         if file_format == "text":
             rdd.map(lambda (k, v): FileUtil.__dump_as_json(k, v, separator).saveAsTextFile(filename))
         elif file_format == "sequence":
@@ -132,3 +214,48 @@ where pyjson is the python representation of the JSON object (e.g., dict)"""
             pass
         return config
     
+
+
+##################################################################
+
+import argparse
+
+def main(argv=None):
+    '''this is called if run from command line'''
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i','--input_file', required=True)
+    parser.add_argument('--input_file_format', default='sequence')
+    parser.add_argument('--input_data_type', default='json')
+    parser.add_argument('-o','--output_dir', required=True)
+    parser.add_argument('--output_file_format', default='sequence')
+    parser.add_argument('--output_data_type', default='json')
+    args=parser.parse_args()
+
+    sc = SparkContext(appName="fileUtil")
+    fUtil = FileUtil(sc)
+
+    ## CONFIG LOAD
+    input_kwargs = {"file_format": args.input_file_format,
+                   "data_type": args.input_data_type}
+    parse_kwargs = {"separator": '\t'}
+    load_kwargs = merge_dicts(input_kwargs, parse_kwargs)
+    
+    ## LOAD
+    rdd = fUtil.load_file(args.input_file, **load_kwargs)
+
+    ## CONFIG SAVE
+    output_kwargs = {"file_format": args.output_file_format,
+                     "data_type": args.output_data_type}
+    emit_kwargs = {"separator": "\t"}
+    save_kwargs = merge_dicts(output_kwargs, emit_kwargs)
+
+    ## SAVE
+    print("Saving to {}".format(args.output_dir))
+    fUtil.save_file(rdd, args.output_dir, **save_kwargs)
+
+if __name__ == "__main__":
+    """
+        Usage: tokenizer.py [input] [config] [output]
+    """
+    main()
