@@ -1,0 +1,3 @@
+http://www.example.com/example01	{"a": "WebPage", "description": "This is a web page"}
+http://www.example.com/example02	{"a": "WebPage", "description": "Another web page"}
+ 
