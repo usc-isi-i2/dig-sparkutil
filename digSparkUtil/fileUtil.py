@@ -105,12 +105,48 @@ class FileUtil(object):
                            ("text", "csv"):      "_save_text_csv_file"}
 
     def save_file(self, rdd, filename, file_format='sequence', data_type='json', **kwargs):
-        if data_type == "json":
-            return self.save_json_file(rdd, filename, file_format, **kwargs)
-        elif data_type == "csv":
-            return self.save_csv_file(rdd, filename, file_format, **kwargs)
-        else:
-            raise ValueError("Unexpected file_format {}".format(file_format))
+        try:
+            handlerName = FileUtil.save_dispatch_table[(file_format, data_type)]
+            handler = getattr(self, handlerName)
+            rdd = handler(filename, **kwargs)
+            # TBD: return (rdd, manifestEntry)
+            # entry = self.makeEntry(input_filename=filename,
+            #                        input_file_format=file_format,
+            #                        input_data_type=data_type)
+            # return (rdd, entry)
+            return rdd
+        except KeyError: 
+            raise NotImplementedError("File_Format={}, data_type={}".format(file_format, data_type))
+
+    def _save_sequence_json_file(self, rdd, filename, separator='\t', **kwargs):
+        # regardless of whatever it is, key is retained
+        rdd.mapValues(lambda x: json.dumps(x)).saveAsSequenceFile(filename)
+        return filename
+
+    def _save_text_json_file(self, rdd, filename, separator='\t', **kwargs):
+        rdd.map(lambda (k, v): FileUtil.__dump_as_json(k, v, separator).saveAsTextFile(filename))
+        return filename
+
+    def _save_text_csv_file(self, rdd, filename, separator='\t', encoding='utf-8', **kwargs):
+        with io.open(filename, 'wb', encoding=encoding) as f:
+            wrtr = csv.writer(f, delimiter=separator)
+                
+            def save_csv_record(line):
+                wrtr.writerow(line)
+
+            rdd.foreach(save_csv_record)
+        return filename
+
+    def _save_sequence_csv_file(self, rdd, filename, separator='\t', **kwargs):
+        raise NotImplementedError("File_Format=sequence, data_type=csv")
+
+    # def save_file(self, rdd, filename, file_format='sequence', data_type='json', **kwargs):
+    #     if data_type == "json":
+    #         return self.save_json_file(rdd, filename, file_format, **kwargs)
+    #     elif data_type == "csv":
+    #         return self.save_csv_file(rdd, filename, file_format, **kwargs)
+    #     else:
+    #         raise ValueError("Unexpected file_format {}".format(file_format))
 
     ## JSON
 
@@ -144,7 +180,6 @@ where pyjson is the python representation of the JSON object (e.g., dict)"""
 
     def save_json_file(self, rdd, filename, file_format='sequence', separator='\t'):
         print("Enter save_json_file")
-        exit(0)
         if file_format == "text":
             rdd.map(lambda (k, v): FileUtil.__dump_as_json(k, v, separator).saveAsTextFile(filename))
         elif file_format == "sequence":
