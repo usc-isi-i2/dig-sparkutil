@@ -56,6 +56,20 @@ class FileUtil(object):
     ## file_format is in {text, sequence}
     ## data_type is in {csv, json}
     
+    def load_file(self, filename, file_format='sequence', data_type='json', **kwargs):
+        try:
+            handlerName = FileUtil.load_dispatch_table[(file_format, data_type)]
+            handler = getattr(self, handlerName)
+            rdd = handler(filename, **kwargs)
+            # TBD: return (rdd, manifestEntry)
+            # entry = self.makeEntry(input_filename=filename,
+            #                        input_file_format=file_format,
+            #                        input_data_type=data_type)
+            # return (rdd, entry)
+            return rdd
+        except KeyError: 
+            raise NotImplementedError("File_Format={}, data_type={}".format(file_format, data_type))
+
     load_dispatch_table = {("sequence", "json"): "_load_sequence_json_file",
                            ("sequence", "csv"):  "_load_sequence_csv_file",
                            ("text", "json"):     "_load_text_json_file",
@@ -85,15 +99,17 @@ class FileUtil(object):
         rdd_parsed = rdd_input.map(load_csv_record)
         return rdd_parsed
 
-    def load_file(self, filename, file_format='sequence', data_type='json', **kwargs):
+    ## SAVE
+
+    def save_file(self, rdd, filename, file_format='sequence', data_type='json', **kwargs):
         try:
-            handlerName = FileUtil.load_dispatch_table[(file_format, data_type)]
+            handlerName = FileUtil.save_dispatch_table[(file_format, data_type)]
             handler = getattr(self, handlerName)
-            rdd = handler(filename, **kwargs)
+            rdd = handler(rdd, filename, **kwargs)
             # TBD: return (rdd, manifestEntry)
-            # entry = self.makeEntry(input_filename=filename,
-            #                        input_file_format=file_format,
-            #                        input_data_type=data_type)
+            # entry = self.makeEntry(output_filename=filename,
+            #                        output_file_format=file_format,
+            #                        output_data_type=data_type)
             # return (rdd, entry)
             return rdd
         except KeyError: 
@@ -104,27 +120,16 @@ class FileUtil(object):
                            ("text", "json"):     "_save_text_json_file",
                            ("text", "csv"):      "_save_text_csv_file"}
 
-    def save_file(self, rdd, filename, file_format='sequence', data_type='json', **kwargs):
-        try:
-            handlerName = FileUtil.save_dispatch_table[(file_format, data_type)]
-            handler = getattr(self, handlerName)
-            rdd = handler(filename, **kwargs)
-            # TBD: return (rdd, manifestEntry)
-            # entry = self.makeEntry(input_filename=filename,
-            #                        input_file_format=file_format,
-            #                        input_data_type=data_type)
-            # return (rdd, entry)
-            return rdd
-        except KeyError: 
-            raise NotImplementedError("File_Format={}, data_type={}".format(file_format, data_type))
-
     def _save_sequence_json_file(self, rdd, filename, separator='\t', **kwargs):
         # regardless of whatever it is, key is retained
         rdd.mapValues(lambda x: json.dumps(x)).saveAsSequenceFile(filename)
         return filename
 
     def _save_text_json_file(self, rdd, filename, separator='\t', **kwargs):
-        rdd.map(lambda (k, v): FileUtil.__dump_as_json(k, v, separator).saveAsTextFile(filename))
+        rdd_json = rdd.map(lambda (k, v): FileUtil.__dump_as_json(k, v, separator))
+        # this saves the (<uri>, <serialized_json_string>) as as text repn
+        # perhaps a regular readable text file uri<separator>JSON will be more useful?
+        rdd_json.saveAsTextFile(filename)
         return filename
 
     def _save_text_csv_file(self, rdd, filename, separator='\t', encoding='utf-8', **kwargs):
@@ -160,71 +165,70 @@ class FileUtil(object):
             elif len(line_elem) == 1:
                 return '', json.loads(line_elem[0])
 
-    def load_json_file(self, filename, file_format, separator='\t'):
-        """options is a dict or something coercible to dict
-returns RDD of <uri, pyjson>
-where pyjson is the python representation of the JSON object (e.g., dict)"""
-        if file_format == "text":
-            # each line is <key><tab><json>
-            input_rdd = self.sc.textFile(filename).map(lambda x: FileUtil.__parse_json_line(x, separator))
-        elif file_format == "sequence":
-            # each element is <key><tab><json>
-            input_rdd = self.sc.sequenceFile(filename).mapValues(lambda x: json.loads(x))
-        else:
-            raise ValueError("Unexpected file_format {}".format(file_format))
-        return input_rdd
+#     def load_json_file(self, filename, file_format, separator='\t'):
+#         """options is a dict or something coercible to dict
+# returns RDD of <uri, pyjson>
+# where pyjson is the python representation of the JSON object (e.g., dict)"""
+#         if file_format == "text":
+#             # each line is <key><tab><json>
+#             input_rdd = self.sc.textFile(filename).map(lambda x: FileUtil.__parse_json_line(x, separator))
+#         elif file_format == "sequence":
+#             # each element is <key><tab><json>
+#             input_rdd = self.sc.sequenceFile(filename).mapValues(lambda x: json.loads(x))
+#         else:
+#             raise ValueError("Unexpected file_format {}".format(file_format))
+#         return input_rdd
 
     @staticmethod
     def __dump_as_json(key, value, sep):
         return key + sep + json.dumps(value)
 
-    def save_json_file(self, rdd, filename, file_format='sequence', separator='\t'):
-        print("Enter save_json_file")
-        if file_format == "text":
-            rdd.map(lambda (k, v): FileUtil.__dump_as_json(k, v, separator).saveAsTextFile(filename))
-        elif file_format == "sequence":
-            # whatever it is, key is retained
-            rdd.mapValues(lambda x: json.dumps(x)).saveAsSequenceFile(filename)
-        else:
-            raise ValueError("Unexpected file_format {}".format(file_format))
+    # def save_json_file(self, rdd, filename, file_format='sequence', separator='\t'):
+    #     if file_format == "text":
+    #         rdd.map(lambda (k, v): FileUtil.__dump_as_json(k, v, separator).saveAsTextFile(filename))
+    #     elif file_format == "sequence":
+    #         # whatever it is, key is retained
+    #         rdd.mapValues(lambda x: json.dumps(x)).saveAsSequenceFile(filename)
+    #     else:
+    #         raise ValueError("Unexpected file_format {}".format(file_format))
 
     ## CSV
 
-    def load_csv_file(self, filename, file_format, separator=','):
-        """returns RDD, each row has all fields as list"""
-        if file_format == "text":
-            # http://stackoverflow.com/a/33864015/2077242
-            input_rdd = self.sc.textFile(filename)
+    # def load_csv_file(self, filename, file_format, separator=','):
+    #     """returns RDD, each row has all fields as list"""
+    #     if file_format == "text":
+    #         # http://stackoverflow.com/a/33864015/2077242
+    #         input_rdd = self.sc.textFile(filename)
 
-            def load_csv_record(line):
-                input = StringIO.StringIO(line)
-                reader = csv.reader(input, delimiter=separator)
-                return reader.next()
+    #         def load_csv_record(line):
+    #             input = StringIO.StringIO(line)
+    #             reader = csv.reader(input, delimiter=separator)
+    #             return reader.next()
 
-            parsed_rdd = input_rdd.map(load_csv_record)
-            return parsed_rdd
+    #         parsed_rdd = input_rdd.map(load_csv_record)
+    #         return parsed_rdd
 
-        elif file_format == "sequence":
-            raise NotImplementedError("File_Format=sequence, data_type=csv")
-        else:
-            raise ValueError("Unexpected file_format {}".format(file_format))
-        return input_rdd
+    #     elif file_format == "sequence":
+    #         raise NotImplementedError("File_Format=sequence, data_type=csv")
+    #     else:
+    #         raise ValueError("Unexpected file_format {}".format(file_format))
+    #     return input_rdd
 
-    def save_csv_file(self, rdd, filename, file_format, separator=',', encoding='utf-8'):
-        if file_format == "text":
-            with io.open(filename, 'wb', encoding=encoding) as f:
-                wrtr = csv.writer(f, delimiter=separator)
+    # def save_csv_file(self, rdd, filename, file_format, separator=',', encoding='utf-8'):
+    #     if file_format == "text":
+    #         with io.open(filename, 'wb', encoding=encoding) as f:
+    #             wrtr = csv.writer(f, delimiter=separator)
                 
-                def save_csv_record(line):
-                    wrtr.writerow(line)
+    #             def save_csv_record(line):
+    #                 wrtr.writerow(line)
 
-                rdd.foreach(save_csv_record)
-                return filename
+    #             rdd.foreach(save_csv_record)
+    #             return filename
 
-        elif file_format == "sequence":
-            raise NotImplementedError("File_Format=sequence, data_type=csv")
-        else:
-            raise ValueError("Unexpected file_format {}".format(file_format))
+    #     elif file_format == "sequence":
+    #         raise NotImplementedError("File_Format=sequence, data_type=csv")
+    #     else:
+    #         raise ValueError("Unexpected file_format {}".format(file_format))
 
     @staticmethod
     def get_json_config(config_spec):
@@ -256,7 +260,7 @@ where pyjson is the python representation of the JSON object (e.g., dict)"""
 import argparse
 
 def main(argv=None):
-    '''this is called if run from command line'''
+    '''TEST ONLY: this is called if run from command line'''
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-i','--input_file', required=True)
@@ -286,7 +290,6 @@ def main(argv=None):
     save_kwargs = merge_dicts(output_kwargs, emit_kwargs)
 
     ## SAVE
-    print("Saving to {}".format(args.output_dir))
     fUtil.save_file(rdd, args.output_dir, **save_kwargs)
 
 if __name__ == "__main__":
