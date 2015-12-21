@@ -18,3 +18,10 @@ def flatten(l):
                 yield sub
         else:
             yield el
+
+from itertools import izip_longest
+
+def iter_chunks(iterable, n, fillvalue=None):
+    args = [iter(iterable)] * n
+    return izip_longest(*args, fillvalue=fillvalue)
+
