@@ -253,6 +253,23 @@ class FileUtil(object):
             pass
         return config
     
+    @staticmethod
+    def get_config(config_spec):
+        """Like get_json_config but does not parse result as JSON"""
+        config_file = None
+        if config_spec.startswith("http"):
+            # URL: fetch it
+            config_file = urllib.urlopen(config_spec)
+        else:
+            # string: open file with that name
+            config_file = open(config_spec)
+        config = json.load(config_file)
+        # Close any open files
+        try:
+            config_file.close()
+        except:
+            pass
+        return config
 
 
 ##################################################################
