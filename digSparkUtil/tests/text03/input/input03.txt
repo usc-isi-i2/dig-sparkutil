@@ -1,0 +1,2 @@
+{"a": "WebPage", "description": "This is a web page", "uri": "http://www.example.com/example01"}
+{"a": "WebPage", "description": "Another web page", "uri": "http://www.example.com/example02"}
