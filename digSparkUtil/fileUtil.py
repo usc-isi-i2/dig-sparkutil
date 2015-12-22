@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
+import sys
 import json
 import csv
 import StringIO
@@ -7,6 +9,7 @@ import io
 from dictUtil import as_dict, merge_dicts
 import inspect
 import urllib
+import jq
 
 from pyspark import SparkContext
 
@@ -70,10 +73,11 @@ class FileUtil(object):
         except KeyError: 
             raise NotImplementedError("File_Format={}, data_type={}".format(file_format, data_type))
 
-    load_dispatch_table = {("sequence", "json"): "_load_sequence_json_file",
-                           ("sequence", "csv"):  "_load_sequence_csv_file",
-                           ("text", "json"):     "_load_text_json_file",
-                           ("text", "csv"):      "_load_text_csv_file"}
+    load_dispatch_table = {("sequence", "json"):  "_load_sequence_json_file",
+                           ("sequence", "csv"):   "_load_sequence_csv_file",
+                           ("text", "json"):      "_load_text_json_file",
+                           ("text", "jsonlines"): "_load_text_jsonlines_file",
+                           ("text", "csv"):       "_load_text_csv_file"}
     
     def _load_sequence_json_file(self, filename, **kwargs):
         rdd_input = self.sc.sequenceFile(filename)
@@ -81,20 +85,57 @@ class FileUtil(object):
         return rdd_json
 
     def _load_text_json_file(self, filename, separator='\t', **kwargs):
-        rdd_input = self.sc.textFile(filename)
-        rdd_json = rdd_input.map(lambda x: FileUtil.__parse_json_line(x, separator))
+        # rdd_input = self.sc.textFile(filename)
+        # rdd_json = rdd_input.map(lambda x: FileUtil.__parse_json_line(x, separator))
+        rdd_strings = self.sc.textFile(filename)
+        rdd_split = rdd_strings.map(lambda line: tuple(line.split(separator, 1)))
+        def tryJson(v):
+            try:
+                j = json.loads(v)
+                return j
+            except Exception as e:
+                print("failed [{}] on {}".format(str(e), v), file=sys.stderr)
+        rdd_json = rdd_split.mapValues(lambda v: tryJson(v))
         return rdd_json
 
+    def _load_text_jsonlines_file(self, filename, keyPath='.uri', **kwargs):
+        rdd_strings = self.sc.textFile(filename)
+        rdd_strings.saveAsTextFile('/tmp/rdd_strings')
+        def tryJson(line):
+            try:
+                obj = json.loads(line)
+                # We ignore all but the first occurrence of key
+                try:
+                    key = jq.jq(keyPath).transform(obj, multiple_output=False)
+                except:
+                    key = None
+                if key:
+                    # i.e., a paired RDD
+                    return (key, obj)
+                else:
+                    raise ValueError("No key (per {}) in line {}".format(keyPath, line))
+            except Exception as e:
+                print("failed [{}] on {}".format(str(e), line), file=sys.stderr)
+        rdd_json = rdd_strings.map(lambda line: tryJson(line))
+        return rdd_json
+
+
     def _load_sequence_csv_file(self, filename, **kwargs):
+        """Should emulate text/csv"""
         raise NotImplementedError("File_Format=sequence, data_type=csv")
 
     def _load_text_csv_file(self, filename, separator='\t', **kwargs):
+        """Should return a pair RDD"""
         rdd_input = self.sc.textFile(filename)
 
         def load_csv_record(line):
             input_stream = StringIO.StringIO(line)
             reader = csv.reader(input_stream, delimiter=separator)
-            return reader.next()
+            (key, rest) = reader.next()
+            # generate dict of "0": first_value, "1": second value, ...
+            # d = {(str(i), v) for (i, v) in }
+            # {key, d}
+            return (key, rest)
 
         rdd_parsed = rdd_input.map(load_csv_record)
         return rdd_parsed
