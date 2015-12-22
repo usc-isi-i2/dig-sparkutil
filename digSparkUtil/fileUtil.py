@@ -57,7 +57,7 @@ class FileUtil(object):
 
     ## Herein:
     ## file_format is in {text, sequence}
-    ## data_type is in {csv, json}
+    ## data_type is in {csv, json, jsonlines(=keyless)}
     
     def load_file(self, filename, file_format='sequence', data_type='json', **kwargs):
         try:
@@ -100,7 +100,6 @@ class FileUtil(object):
 
     def _load_text_jsonlines_file(self, filename, keyPath='.uri', **kwargs):
         rdd_strings = self.sc.textFile(filename)
-        rdd_strings.saveAsTextFile('/tmp/rdd_strings')
         def tryJson(line):
             try:
                 obj = json.loads(line)
