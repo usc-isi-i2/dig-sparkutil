@@ -30,9 +30,7 @@ config = {
     'download_url': 'https://github.com/usc-isi-i2/dig-sparkutil',
     'author_email': 'andrew.philpot@gmail.com',
     'install_requires': ['nose2',
-                         # This is https://github.com/usc-isi-i2/Hadoop
-                         # forked from https://github.com/matteobertozzi/Hadoop
-                         'Hadoop'],
+                         'jq'],
     # these are the (sub)modules of the current directory that we care about
     'packages': ['digSparkUtil'],
     'scripts': [],
