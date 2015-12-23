@@ -7,9 +7,11 @@ import csv
 import StringIO
 import io
 from dictUtil import as_dict, merge_dicts
-import inspect
 import urllib
 import jq
+from itertools import izip
+# for manifest introspection only
+import inspect
 
 from pyspark import SparkContext
 
@@ -123,18 +125,24 @@ class FileUtil(object):
         """Should emulate text/csv"""
         raise NotImplementedError("File_Format=sequence, data_type=csv")
 
-    def _load_text_csv_file(self, filename, separator='\t', **kwargs):
-        """Should return a pair RDD"""
+    def _load_text_csv_file(self, filename, separator=',', **kwargs):
+        """Return a pair RDD where key is taken from first column, remaining columns are named after their column id as string"""
         rdd_input = self.sc.textFile(filename)
 
         def load_csv_record(line):
             input_stream = StringIO.StringIO(line)
-            reader = csv.reader(input_stream, delimiter=separator)
-            (key, rest) = reader.next()
-            # generate dict of "0": first_value, "1": second value, ...
-            # d = {(str(i), v) for (i, v) in }
-            # {key, d}
-            return (key, rest)
+            reader = csv.reader(input_stream, delimiter=',')
+            # key in first column, remaining columns 1..n become dict key values
+            payload = reader.next()
+            key = payload[0]
+            rest = payload[1:]
+            # generate dict of "1": first value, "2": second value, ...
+            d = {}
+            for (cell,i) in izip(rest, range(1,1+len(rest))):
+                d[str(i)] = cell
+            # just in case, add "0": key
+            d["0"] = key
+            return (key, d)
 
         rdd_parsed = rdd_input.map(load_csv_record)
         return rdd_parsed
@@ -185,14 +193,6 @@ class FileUtil(object):
     def _save_sequence_csv_file(self, rdd, filename, separator='\t', **kwargs):
         raise NotImplementedError("File_Format=sequence, data_type=csv")
 
-    # def save_file(self, rdd, filename, file_format='sequence', data_type='json', **kwargs):
-    #     if data_type == "json":
-    #         return self.save_json_file(rdd, filename, file_format, **kwargs)
-    #     elif data_type == "csv":
-    #         return self.save_csv_file(rdd, filename, file_format, **kwargs)
-    #     else:
-    #         raise ValueError("Unexpected file_format {}".format(file_format))
-
     ## JSON
 
     @staticmethod
@@ -205,70 +205,9 @@ class FileUtil(object):
             elif len(line_elem) == 1:
                 return '', json.loads(line_elem[0])
 
-#     def load_json_file(self, filename, file_format, separator='\t'):
-#         """options is a dict or something coercible to dict
-# returns RDD of <uri, pyjson>
-# where pyjson is the python representation of the JSON object (e.g., dict)"""
-#         if file_format == "text":
-#             # each line is <key><tab><json>
-#             input_rdd = self.sc.textFile(filename).map(lambda x: FileUtil.__parse_json_line(x, separator))
-#         elif file_format == "sequence":
-#             # each element is <key><tab><json>
-#             input_rdd = self.sc.sequenceFile(filename).mapValues(lambda x: json.loads(x))
-#         else:
-#             raise ValueError("Unexpected file_format {}".format(file_format))
-#         return input_rdd
-
     @staticmethod
     def __dump_as_json(key, value, sep):
         return key + sep + json.dumps(value)
-
-    # def save_json_file(self, rdd, filename, file_format='sequence', separator='\t'):
-    #     if file_format == "text":
-    #         rdd.map(lambda (k, v): FileUtil.__dump_as_json(k, v, separator).saveAsTextFile(filename))
-    #     elif file_format == "sequence":
-    #         # whatever it is, key is retained
-    #         rdd.mapValues(lambda x: json.dumps(x)).saveAsSequenceFile(filename)
-    #     else:
-    #         raise ValueError("Unexpected file_format {}".format(file_format))
-
-    ## CSV
-
-    # def load_csv_file(self, filename, file_format, separator=','):
-    #     """returns RDD, each row has all fields as list"""
-    #     if file_format == "text":
-    #         # http://stackoverflow.com/a/33864015/2077242
-    #         input_rdd = self.sc.textFile(filename)
-
-    #         def load_csv_record(line):
-    #             input = StringIO.StringIO(line)
-    #             reader = csv.reader(input, delimiter=separator)
-    #             return reader.next()
-
-    #         parsed_rdd = input_rdd.map(load_csv_record)
-    #         return parsed_rdd
-
-    #     elif file_format == "sequence":
-    #         raise NotImplementedError("File_Format=sequence, data_type=csv")
-    #     else:
-    #         raise ValueError("Unexpected file_format {}".format(file_format))
-    #     return input_rdd
-
-    # def save_csv_file(self, rdd, filename, file_format, separator=',', encoding='utf-8'):
-    #     if file_format == "text":
-    #         with io.open(filename, 'wb', encoding=encoding) as f:
-    #             wrtr = csv.writer(f, delimiter=separator)
-                
-    #             def save_csv_record(line):
-    #                 wrtr.writerow(line)
-
-    #             rdd.foreach(save_csv_record)
-    #             return filename
-
-    #     elif file_format == "sequence":
-    #         raise NotImplementedError("File_Format=sequence, data_type=csv")
-    #     else:
-    #         raise ValueError("Unexpected file_format {}".format(file_format))
 
     @staticmethod
     def get_json_config(config_spec):
@@ -311,7 +250,6 @@ class FileUtil(object):
             pass
         return config
 
-
 ##################################################################
 
 import argparse
@@ -323,10 +261,16 @@ def main(argv=None):
     parser.add_argument('-i','--input_file', required=True)
     parser.add_argument('--input_file_format', default='sequence')
     parser.add_argument('--input_data_type', default='json')
+    parser.add_argument('--input_separator', default='\t')
     parser.add_argument('-o','--output_dir', required=True)
     parser.add_argument('--output_file_format', default='sequence')
     parser.add_argument('--output_data_type', default='json')
+    parser.add_argument('--output_separator', default='\t')
     args=parser.parse_args()
+
+    # can be inconvenient to specify tab on the command line
+    args.input_separator = "\t" if args.input_separator=='tab' else args.input_separator
+    args.output_separator = "\t" if args.output_separator=='tab' else args.output_separator
 
     sc = SparkContext(appName="fileUtil")
     fUtil = FileUtil(sc)
@@ -334,7 +278,7 @@ def main(argv=None):
     ## CONFIG LOAD
     input_kwargs = {"file_format": args.input_file_format,
                    "data_type": args.input_data_type}
-    parse_kwargs = {"separator": '\t'}
+    parse_kwargs = {"separator": args.input_separator}
     load_kwargs = merge_dicts(input_kwargs, parse_kwargs)
     
     ## LOAD
@@ -343,7 +287,7 @@ def main(argv=None):
     ## CONFIG SAVE
     output_kwargs = {"file_format": args.output_file_format,
                      "data_type": args.output_data_type}
-    emit_kwargs = {"separator": "\t"}
+    emit_kwargs = {"separator": args.output_separator}
     save_kwargs = merge_dicts(output_kwargs, emit_kwargs)
 
     ## SAVE
