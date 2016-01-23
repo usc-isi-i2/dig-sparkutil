@@ -16,7 +16,10 @@ cat /tmp/csv04/part*
 
 
 Steps to run lsh clustering : 
-1. pip install digSparkUtil
-2. pip install digTokenizer
-3. pip install digLshCLustering
+1. pip install digSparkUtil <br />
+    This is the code for reading the files into spark rdds
+2. pip install digTokenizer <br />
+    This is the code for generating tokens, tweak tokenizer configuration as per the requirement. 
+3. pip install digLshCLustering <br />
+    This does the lsh clustering based on the tokens generated.
 
