@@ -13,3 +13,10 @@ example of running test suites
 rm -rf /tmp/csv04
 python fileUtil.py -i tests/text04/input/input04.csv --input_file_format 'text' --input_data_type 'csv' --input_separator "," -o '/tmp/csv04' --output_file_format text --output_data_type 'json' --output_separator tab
 cat /tmp/csv04/part*
+
+
+Steps to run lsh clustering : 
+1. pip install digSparkUtil
+2. pip install digTokenizer
+3. pip install digLshCLustering
+
