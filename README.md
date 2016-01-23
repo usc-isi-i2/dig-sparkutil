@@ -15,11 +15,11 @@ python fileUtil.py -i tests/text04/input/input04.csv --input_file_format 'text' 
 cat /tmp/csv04/part*
 
 
-Steps to run lsh clustering : 
+####Steps to run lsh clustering : <br />
 1. pip install digSparkUtil <br />
-    This is the code for reading the files into spark rdds
+    This is the code for reading the files into spark rdds <br />
 2. pip install digTokenizer <br />
-    This is the code for generating tokens, tweak tokenizer configuration as per the requirement. 
+    This is the code for generating tokens, tweak tokenizer configuration as per the requirement. <br />
 3. pip install digLshCLustering <br />
-    This does the lsh clustering based on the tokens generated.
+    This does the lsh clustering based on the tokens generated.<br />
 
