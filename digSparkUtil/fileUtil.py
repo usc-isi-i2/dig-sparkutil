@@ -8,7 +8,7 @@ import StringIO
 import io
 from dictUtil import as_dict, merge_dicts
 import urllib
-import jq
+# import jq
 from itertools import izip
 from logUtil import logging
 # for manifest introspection only
@@ -109,7 +109,8 @@ class FileUtil(object):
                 obj = json.loads(line)
                 # We ignore all but the first occurrence of key
                 try:
-                    key = jq.jq(keyPath).transform(obj, multiple_output=False)
+                    # key = jq.jq(keyPath).transform(obj, multiple_output=False)
+                    key = obj["uri"]
                 except:
                     key = None
                 if key:
