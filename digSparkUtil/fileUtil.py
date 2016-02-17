@@ -72,7 +72,7 @@ class FileUtil(object):
             #                        input_file_format=file_format,
             #                        input_data_type=data_type)
             # return (rdd, entry)
-            logging.info("Loaded {}/{} file {}: {} elements".format(file_format, data_type, filename, rdd.count()))
+            #logging.info("Loaded {}/{} file {}: {} elements".format(file_format, data_type, filename, rdd.count()))
             return rdd
         except KeyError: 
             raise NotImplementedError("File_Format={}, data_type={}".format(file_format, data_type))
