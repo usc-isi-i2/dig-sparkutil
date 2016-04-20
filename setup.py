@@ -29,8 +29,7 @@ config = {
     'url': 'https://github.com/usc-isi-i2/dig-sparkutil',
     'download_url': 'https://github.com/usc-isi-i2/dig-sparkutil',
     'author_email': 'andrew.philpot@gmail.com',
-    'install_requires': ['nose2',
-                         'jq'],
+    'install_requires': ['nose2'],
     # these are the (sub)modules of the current directory that we care about
     'packages': ['digSparkUtil'],
     'scripts': [],

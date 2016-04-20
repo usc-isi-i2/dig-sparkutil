@@ -1,5 +1,5 @@
 __author__ = 'philpot'
-__version__ = '1.0.21'
+__version__ = '1.0.23'
 __all__ = ["dictUtil", "fileUtil", "jsonUtil", "listUtil", "logUtil", "miscUtil", "rddUtil","ESUtil","Workflow"]
 from dictUtil import *
 from fileUtil import *
